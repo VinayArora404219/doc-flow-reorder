@@ -73,6 +73,13 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
     }
   };
 
+  // Convert HTML content to plain text for editing
+  const getPlainTextContent = (htmlContent: string) => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    return tempDiv.textContent || tempDiv.innerText || '';
+  };
+
   return (
     <Card
       ref={setNodeRef}
@@ -101,7 +108,7 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
             <div className="space-y-3">
               <Textarea
                 ref={textareaRef}
-                value={editContent}
+                value={getPlainTextContent(editContent)}
                 onChange={(e) => setEditContent(e.target.value)}
                 onKeyDown={handleKeyDown}
                 className="resize-none border-blue-300 focus:border-blue-500 focus:ring-blue-500"
@@ -126,10 +133,12 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
               </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
-                {paragraph.content}
-              </p>
+            <div className="space-y-2 group">
+              {/* Render HTML content with preserved formatting */}
+              <div 
+                className="text-gray-800 leading-relaxed"
+                dangerouslySetInnerHTML={{ __html: paragraph.content }}
+              />
               {mode === 'edit' && (
                 <Button
                   size="sm"

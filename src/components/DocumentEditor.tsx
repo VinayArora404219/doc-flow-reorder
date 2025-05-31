@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -54,22 +53,29 @@ const DocumentEditor = () => {
 
     setIsLoading(true);
     try {
-      const { Document, Packer, Paragraph: DocxParagraph, TextRun } = await import('docx');
+      const { Document, Packer, Paragraph: DocxParagraph } = await import('docx');
+      
+      // Convert HTML content back to plain text for docx
+      const cleanParagraphs = paragraphs.map(para => {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = para.content;
+        return tempDiv.textContent || tempDiv.innerText || '';
+      });
       
       const doc = new Document({
         sections: [{
           properties: {},
-          children: paragraphs.map(para => 
+          children: cleanParagraphs.map(content => 
             new DocxParagraph({
-              children: [new TextRun(para.content)],
+              text: content,
               spacing: { after: 200 }
             })
           )
         }]
       });
 
-      const buffer = await Packer.toBuffer(doc);
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      // Use toBlob instead of toBuffer for browser compatibility
+      const blob = await Packer.toBlob(doc);
       
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

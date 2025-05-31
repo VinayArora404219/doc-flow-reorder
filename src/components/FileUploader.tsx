@@ -17,20 +17,23 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onDocumentParsed }) => {
       const mammoth = await import('mammoth');
       const arrayBuffer = await file.arrayBuffer();
       
-      const result = await mammoth.extractRawText({ arrayBuffer });
-      const text = result.value;
+      // Convert to HTML to preserve formatting
+      const result = await mammoth.convertToHtml({ arrayBuffer });
+      const html = result.value;
       
-      // Split into paragraphs, filter out empty ones
-      const paragraphTexts = text
-        .split(/\n\s*\n/)
-        .map(p => p.trim())
-        .filter(p => p.length > 0);
-
-      const paragraphs: Paragraph[] = paragraphTexts.map((content, index) => ({
-        id: `paragraph-${index}-${Date.now()}`,
-        content,
-        originalIndex: index
-      }));
+      // Parse HTML to extract paragraphs with formatting preserved
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const paragraphElements = doc.querySelectorAll('p');
+      
+      const paragraphs: Paragraph[] = Array.from(paragraphElements)
+        .map(p => p.innerHTML.trim())
+        .filter(content => content.length > 0)
+        .map((content, index) => ({
+          id: `paragraph-${index}-${Date.now()}`,
+          content,
+          originalIndex: index
+        }));
 
       if (paragraphs.length === 0) {
         toast({
