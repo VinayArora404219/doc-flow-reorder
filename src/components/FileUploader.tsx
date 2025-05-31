@@ -13,11 +13,17 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onDocumentParsed }) => {
   const { toast } = useToast();
 
   const parseDocument = useCallback(async (file: File) => {
+    console.log('Starting document parsing for file:', file.name, 'Size:', file.size);
+    
     try {
       const processor = new WordProcessor();
+      console.log('WordProcessor instance created');
+      
       const paragraphs = await processor.parseWordDocument(file);
+      console.log('Document parsing completed. Paragraphs found:', paragraphs.length);
 
       if (paragraphs.length === 0) {
+        console.warn('No paragraphs found in document');
         toast({
           title: "No content found",
           description: "The document appears to be empty or couldn't be parsed.",
@@ -26,12 +32,20 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onDocumentParsed }) => {
         return;
       }
 
+      console.log('Calling onDocumentParsed with:', paragraphs.length, 'paragraphs');
       onDocumentParsed(paragraphs, file.name, processor);
     } catch (error) {
       console.error('Error parsing document:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        fileName: file.name,
+        fileSize: file.size
+      });
+      
       toast({
         title: "Parsing failed",
-        description: "There was an error reading your document. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error reading your document. Please try again.",
         variant: "destructive"
       });
     }
@@ -40,6 +54,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onDocumentParsed }) => {
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    console.log('File selected:', file.name, file.type, file.size);
 
     if (!file.name.toLowerCase().endsWith('.docx')) {
       toast({

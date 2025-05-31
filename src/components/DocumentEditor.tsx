@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,6 +9,7 @@ import { Upload, Download, FileText } from 'lucide-react';
 import { WordProcessor, type WordParagraph } from '../utils/wordProcessor';
 
 export type EditorMode = 'edit' | 'drag';
+export type { WordParagraph }; // Export the WordParagraph type
 
 const DocumentEditor = () => {
   const [paragraphs, setParagraphs] = useState<WordParagraph[]>([]);
@@ -20,6 +20,11 @@ const DocumentEditor = () => {
   const { toast } = useToast();
 
   const handleDocumentParsed = useCallback((parsedParagraphs: WordParagraph[], fileName: string, processor: WordProcessor) => {
+    console.log('Document parsed successfully:', { 
+      paragraphCount: parsedParagraphs.length, 
+      fileName,
+      firstParagraph: parsedParagraphs[0]?.displayText?.substring(0, 50) 
+    });
     setParagraphs(parsedParagraphs);
     setOriginalFileName(fileName);
     setWordProcessor(processor);

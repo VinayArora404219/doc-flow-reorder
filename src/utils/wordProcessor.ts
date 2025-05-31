@@ -1,4 +1,3 @@
-
 interface WordParagraph {
   id: string;
   xmlContent: string;
@@ -18,33 +17,69 @@ export class WordProcessor {
   private documentStructure: WordDocumentStructure | null = null;
 
   async parseWordDocument(file: File): Promise<WordParagraph[]> {
+    console.log('WordProcessor.parseWordDocument called with:', file.name);
+    
     try {
+      console.log('Importing JSZip...');
       const JSZip = await import('jszip');
+      console.log('JSZip imported successfully');
+      
+      console.log('Creating new JSZip instance...');
       const zip = new JSZip.default();
+      
+      console.log('Loading zip content from file...');
       const zipContent = await zip.loadAsync(file);
+      console.log('Zip content loaded successfully');
       
       // Extract the main document XML
+      console.log('Extracting document.xml...');
       const documentXml = await zipContent.file('word/document.xml')?.async('text');
-      if (!documentXml) throw new Error('Invalid Word document');
+      if (!documentXml) {
+        console.error('document.xml not found in zip');
+        throw new Error('Invalid Word document: document.xml not found');
+      }
+      console.log('document.xml extracted, length:', documentXml.length);
 
       // Extract styles and relationships
+      console.log('Extracting styles.xml...');
       const stylesXml = await zipContent.file('word/styles.xml')?.async('text') || '';
+      console.log('styles.xml extracted, length:', stylesXml.length);
+      
+      console.log('Extracting relationships...');
       const relationshipsXml = await zipContent.file('word/_rels/document.xml.rels')?.async('text') || '';
+      console.log('relationships extracted, length:', relationshipsXml.length);
 
       // Parse the document XML
+      console.log('Parsing document XML...');
       const parser = new DOMParser();
       const doc = parser.parseFromString(documentXml, 'text/xml');
       
+      // Check for parsing errors
+      const parserError = doc.querySelector('parsererror');
+      if (parserError) {
+        console.error('XML parsing error:', parserError.textContent);
+        throw new Error('Failed to parse document XML: ' + parserError.textContent);
+      }
+      
       // Extract document structure
+      console.log('Finding document body...');
       const body = doc.querySelector('w\\:body, body');
-      if (!body) throw new Error('Could not find document body');
+      if (!body) {
+        console.error('Document body not found');
+        throw new Error('Could not find document body');
+      }
+      console.log('Document body found');
 
       // Get all paragraph elements (w:p)
+      console.log('Finding paragraph elements...');
       const paragraphElements = body.querySelectorAll('w\\:p, p');
+      console.log('Found paragraph elements:', paragraphElements.length);
       
       const paragraphs: WordParagraph[] = [];
       
       paragraphElements.forEach((pElement, index) => {
+        console.log(`Processing paragraph ${index}...`);
+        
         // Get the text content for display
         const textRuns = pElement.querySelectorAll('w\\:t, t');
         const displayText = Array.from(textRuns)
@@ -52,8 +87,13 @@ export class WordProcessor {
           .join('')
           .trim();
         
+        console.log(`Paragraph ${index} text:`, displayText.substring(0, 50));
+        
         // Skip empty paragraphs
-        if (!displayText) return;
+        if (!displayText) {
+          console.log(`Skipping empty paragraph ${index}`);
+          return;
+        }
         
         // Store the complete XML for this paragraph
         const xmlContent = new XMLSerializer().serializeToString(pElement);
@@ -64,7 +104,11 @@ export class WordProcessor {
           displayText,
           originalIndex: index
         });
+        
+        console.log(`Added paragraph ${index} to results`);
       });
+
+      console.log('Total paragraphs processed:', paragraphs.length);
 
       // Store the document structure for later export
       const beforeFirstParagraph = this.getDocumentHeader(documentXml);
@@ -78,9 +122,11 @@ export class WordProcessor {
         relationships: relationshipsXml
       };
 
+      console.log('Document structure stored for export');
       return paragraphs;
     } catch (error) {
-      console.error('Error parsing Word document:', error);
+      console.error('Error in parseWordDocument:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       throw error;
     }
   }
@@ -89,7 +135,7 @@ export class WordProcessor {
     // Extract everything before the first paragraph
     const firstParagraphIndex = documentXml.indexOf('<w:p ') !== -1 
       ? documentXml.indexOf('<w:p ') 
-      : documentXml.indexOf('<w:p>');
+      : documentXml.indexOf('<w:p');
     
     return firstParagraphIndex !== -1 
       ? documentXml.substring(0, firstParagraphIndex)
