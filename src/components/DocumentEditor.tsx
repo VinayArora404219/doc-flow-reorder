@@ -3,64 +3,46 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import FileUploader from './FileUploader';
-import WordParagraphList from './WordParagraphList';
+import ParagraphList from './ParagraphList';
 import ModeToggle from './ModeToggle';
 import { Upload, Download, FileText } from 'lucide-react';
-import { WordProcessor, type WordParagraph } from '../utils/wordProcessor';
+
+export interface Paragraph {
+  id: string;
+  content: string;
+  originalIndex: number;
+}
 
 export type EditorMode = 'edit' | 'drag';
-export type { WordParagraph }; // Export the WordParagraph type
 
 const DocumentEditor = () => {
-  const [paragraphs, setParagraphs] = useState<WordParagraph[]>([]);
+  const [paragraphs, setParagraphs] = useState<Paragraph[]>([]);
   const [mode, setMode] = useState<EditorMode>('edit');
   const [originalFileName, setOriginalFileName] = useState<string>('');
-  const [wordProcessor, setWordProcessor] = useState<WordProcessor | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleDocumentParsed = useCallback((parsedParagraphs: WordParagraph[], fileName: string, processor: WordProcessor) => {
-    console.log('Document parsed successfully:', { 
-      paragraphCount: parsedParagraphs.length, 
-      fileName,
-      firstParagraph: parsedParagraphs[0]?.displayText?.substring(0, 50) 
-    });
+  const handleDocumentParsed = useCallback((parsedParagraphs: Paragraph[], fileName: string) => {
     setParagraphs(parsedParagraphs);
     setOriginalFileName(fileName);
-    setWordProcessor(processor);
     toast({
       title: "Document loaded successfully!",
-      description: `Parsed ${parsedParagraphs.length} paragraphs from ${fileName}. Original formatting preserved.`,
+      description: `Parsed ${parsedParagraphs.length} paragraphs from ${fileName}`,
     });
   }, [toast]);
 
-  const handleParagraphsReorder = useCallback((newParagraphs: WordParagraph[]) => {
+  const handleParagraphsReorder = useCallback((newParagraphs: Paragraph[]) => {
     setParagraphs(newParagraphs);
   }, []);
 
-  const handleParagraphEdit = useCallback((id: string, newText: string) => {
+  const handleParagraphEdit = useCallback((id: string, newContent: string) => {
     setParagraphs(prev => 
-      prev.map(p => {
-        if (p.id === id) {
-          // Update the XML content to reflect the new text
-          // For now, we'll update the display text and preserve the XML structure
-          const updatedXml = p.xmlContent.replace(
-            /<w:t[^>]*>.*?<\/w:t>/g, 
-            `<w:t>${newText}</w:t>`
-          );
-          return { 
-            ...p, 
-            displayText: newText,
-            xmlContent: updatedXml
-          };
-        }
-        return p;
-      })
+      prev.map(p => p.id === id ? { ...p, content: newContent } : p)
     );
   }, []);
 
   const handleExport = useCallback(async () => {
-    if (!wordProcessor || paragraphs.length === 0) {
+    if (paragraphs.length === 0) {
       toast({
         title: "No content to export",
         description: "Please upload a document first.",
@@ -71,10 +53,42 @@ const DocumentEditor = () => {
 
     setIsLoading(true);
     try {
-      await wordProcessor.exportReorderedDocument(paragraphs, originalFileName);
+      const { Document, Packer, Paragraph: DocxParagraph } = await import('docx');
+      
+      // Convert HTML content back to plain text for docx
+      const cleanParagraphs = paragraphs.map(para => {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = para.content;
+        return tempDiv.textContent || tempDiv.innerText || '';
+      });
+      
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children: cleanParagraphs.map(content => 
+            new DocxParagraph({
+              text: content,
+              spacing: { after: 200 }
+            })
+          )
+        }]
+      });
+
+      // Use toBlob instead of toBuffer for browser compatibility
+      const blob = await Packer.toBlob(doc);
+      
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = originalFileName ? `reordered_${originalFileName}` : 'reordered_document.docx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
       toast({
         title: "Document exported successfully!",
-        description: "Your reordered document has been downloaded with all original formatting preserved.",
+        description: "Your reordered document has been downloaded.",
       });
     } catch (error) {
       console.error('Export error:', error);
@@ -86,7 +100,7 @@ const DocumentEditor = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [paragraphs, originalFileName, wordProcessor, toast]);
+  }, [paragraphs, originalFileName, toast]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -130,7 +144,7 @@ const DocumentEditor = () => {
           <Upload className="h-16 w-16 mx-auto mb-4 text-gray-400" />
           <h3 className="text-xl font-semibold text-gray-600 mb-2">No Document Loaded</h3>
           <p className="text-gray-500 mb-6">
-            Upload a Word document to start editing and reordering paragraphs with preserved formatting
+            Upload a Word document to start editing and reordering paragraphs
           </p>
           <FileUploader onDocumentParsed={handleDocumentParsed} />
         </Card>
@@ -145,7 +159,7 @@ const DocumentEditor = () => {
             </div>
           </div>
           
-          <WordParagraphList
+          <ParagraphList
             paragraphs={paragraphs}
             mode={mode}
             onReorder={handleParagraphsReorder}
