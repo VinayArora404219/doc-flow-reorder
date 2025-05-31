@@ -80,6 +80,19 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
     return tempDiv.textContent || tempDiv.innerText || '';
   };
 
+  // Determine if this is a special element type
+  const getElementType = (content: string) => {
+    if (content.includes('<table')) return 'table';
+    if (content.includes('<h1') || content.includes('<h2') || content.includes('<h3')) return 'heading';
+    if (content.includes('<ul') || content.includes('<ol')) return 'list';
+    if (content.includes('<blockquote')) return 'quote';
+    if (content.includes('<pre')) return 'code';
+    if (content.includes('<hr')) return 'divider';
+    return 'paragraph';
+  };
+
+  const elementType = getElementType(paragraph.content);
+
   return (
     <Card
       ref={setNodeRef}
@@ -92,14 +105,21 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
         mode === 'drag' 
           ? 'cursor-grab active:cursor-grabbing' 
           : ''
+      } ${
+        elementType === 'table' ? 'overflow-x-auto' : ''
       }`}
       {...(mode === 'drag' ? attributes : {})}
       {...(mode === 'drag' ? listeners : {})}
     >
       <div className="flex items-start gap-3">
-        {/* Paragraph Number */}
-        <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-sm font-medium text-gray-600">
+        {/* Paragraph Number with type indicator */}
+        <div className="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-sm font-medium text-gray-600 relative">
           {index + 1}
+          {elementType !== 'paragraph' && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-blue-500 border-2 border-white" 
+                 title={`Type: ${elementType}`}
+            />
+          )}
         </div>
 
         {/* Content Area */}
@@ -111,9 +131,12 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
                 value={getPlainTextContent(editContent)}
                 onChange={(e) => setEditContent(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="resize-none border-blue-300 focus:border-blue-500 focus:ring-blue-500"
+                className="resize-none border-blue-300 focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
                 placeholder="Enter paragraph content..."
               />
+              <div className="text-xs text-gray-500">
+                Note: Rich formatting (tables, lists, etc.) will be converted to plain text when editing.
+              </div>
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -136,7 +159,7 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
             <div className="space-y-2 group">
               {/* Render HTML content with preserved formatting */}
               <div 
-                className="text-gray-800 leading-relaxed"
+                className={`text-gray-800 leading-relaxed ${elementType === 'table' ? 'overflow-x-auto' : ''}`}
                 dangerouslySetInnerHTML={{ __html: paragraph.content }}
               />
               {mode === 'edit' && (

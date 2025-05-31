@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,7 @@ const DocumentEditor = () => {
     setOriginalFileName(fileName);
     toast({
       title: "Document loaded successfully!",
-      description: `Parsed ${parsedParagraphs.length} paragraphs from ${fileName}`,
+      description: `Parsed ${parsedParagraphs.length} sections from ${fileName}`,
     });
   }, [toast]);
 
@@ -53,28 +54,79 @@ const DocumentEditor = () => {
 
     setIsLoading(true);
     try {
-      const { Document, Packer, Paragraph: DocxParagraph } = await import('docx');
+      const { Document, Packer, Paragraph: DocxParagraph, Table, TableRow, TableCell, TextRun } = await import('docx');
       
-      // Convert HTML content back to plain text for docx
-      const cleanParagraphs = paragraphs.map(para => {
+      // Convert HTML content to docx elements while preserving basic structure
+      const docElements: any[] = [];
+      
+      for (const para of paragraphs) {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = para.content;
-        return tempDiv.textContent || tempDiv.innerText || '';
-      });
+        
+        // Handle different element types
+        if (para.content.includes('<table')) {
+          // For tables, create a simple text representation
+          const tableText = tempDiv.textContent || tempDiv.innerText || '';
+          if (tableText.trim()) {
+            docElements.push(new DocxParagraph({
+              children: [new TextRun({
+                text: `[TABLE CONTENT: ${tableText.trim()}]`,
+                italics: true
+              })],
+              spacing: { after: 200 }
+            }));
+          }
+        } else if (para.content.includes('<h1') || para.content.includes('<h2') || para.content.includes('<h3')) {
+          // Handle headings
+          const headingText = tempDiv.textContent || tempDiv.innerText || '';
+          if (headingText.trim()) {
+            docElements.push(new DocxParagraph({
+              children: [new TextRun({
+                text: headingText.trim(),
+                bold: true,
+                size: para.content.includes('<h1') ? 32 : para.content.includes('<h2') ? 28 : 24
+              })],
+              spacing: { after: 200, before: 200 }
+            }));
+          }
+        } else if (para.content.includes('<ul') || para.content.includes('<ol')) {
+          // Handle lists
+          const listItems = tempDiv.querySelectorAll('li');
+          Array.from(listItems).forEach((li, index) => {
+            const listText = li.textContent || li.innerText || '';
+            if (listText.trim()) {
+              const bullet = para.content.includes('<ul') ? '•' : `${index + 1}.`;
+              docElements.push(new DocxParagraph({
+                children: [new TextRun(`${bullet} ${listText.trim()}`)],
+                spacing: { after: 100 },
+                indent: { left: 400 }
+              }));
+            }
+          });
+        } else {
+          // Handle regular paragraphs
+          const plainText = tempDiv.textContent || tempDiv.innerText || '';
+          if (plainText.trim()) {
+            docElements.push(new DocxParagraph({
+              children: [new TextRun(plainText.trim())],
+              spacing: { after: 200 }
+            }));
+          }
+        }
+      }
       
       const doc = new Document({
         sections: [{
           properties: {},
-          children: cleanParagraphs.map(content => 
+          children: docElements.length > 0 ? docElements : [
             new DocxParagraph({
-              text: content,
-              spacing: { after: 200 }
+              children: [new TextRun("No content to export")],
             })
-          )
+          ]
         }]
       });
 
-      // Use toBlob instead of toBuffer for browser compatibility
+      // Use toBlob for browser compatibility
       const blob = await Packer.toBlob(doc);
       
       const url = URL.createObjectURL(blob);
@@ -88,7 +140,7 @@ const DocumentEditor = () => {
 
       toast({
         title: "Document exported successfully!",
-        description: "Your reordered document has been downloaded.",
+        description: "Your reordered document has been downloaded. Note: Complex formatting may be simplified.",
       });
     } catch (error) {
       console.error('Export error:', error);
@@ -152,7 +204,7 @@ const DocumentEditor = () => {
         <Card className="p-6 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-800">
-              Document Content ({paragraphs.length} paragraphs)
+              Document Content ({paragraphs.length} sections)
             </h3>
             <div className="text-sm text-gray-600">
               Mode: <span className="font-medium capitalize">{mode}</span>
