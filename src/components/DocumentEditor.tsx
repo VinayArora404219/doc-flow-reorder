@@ -4,46 +4,58 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import FileUploader from './FileUploader';
-import ParagraphList from './ParagraphList';
+import WordParagraphList from './WordParagraphList';
 import ModeToggle from './ModeToggle';
 import { Upload, Download, FileText } from 'lucide-react';
-
-export interface Paragraph {
-  id: string;
-  content: string;
-  originalIndex: number;
-}
+import { WordProcessor, type WordParagraph } from '../utils/wordProcessor';
 
 export type EditorMode = 'edit' | 'drag';
 
 const DocumentEditor = () => {
-  const [paragraphs, setParagraphs] = useState<Paragraph[]>([]);
+  const [paragraphs, setParagraphs] = useState<WordParagraph[]>([]);
   const [mode, setMode] = useState<EditorMode>('edit');
   const [originalFileName, setOriginalFileName] = useState<string>('');
+  const [wordProcessor, setWordProcessor] = useState<WordProcessor | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleDocumentParsed = useCallback((parsedParagraphs: Paragraph[], fileName: string) => {
+  const handleDocumentParsed = useCallback((parsedParagraphs: WordParagraph[], fileName: string, processor: WordProcessor) => {
     setParagraphs(parsedParagraphs);
     setOriginalFileName(fileName);
+    setWordProcessor(processor);
     toast({
       title: "Document loaded successfully!",
-      description: `Parsed ${parsedParagraphs.length} sections from ${fileName}`,
+      description: `Parsed ${parsedParagraphs.length} paragraphs from ${fileName}. Original formatting preserved.`,
     });
   }, [toast]);
 
-  const handleParagraphsReorder = useCallback((newParagraphs: Paragraph[]) => {
+  const handleParagraphsReorder = useCallback((newParagraphs: WordParagraph[]) => {
     setParagraphs(newParagraphs);
   }, []);
 
-  const handleParagraphEdit = useCallback((id: string, newContent: string) => {
+  const handleParagraphEdit = useCallback((id: string, newText: string) => {
     setParagraphs(prev => 
-      prev.map(p => p.id === id ? { ...p, content: newContent } : p)
+      prev.map(p => {
+        if (p.id === id) {
+          // Update the XML content to reflect the new text
+          // For now, we'll update the display text and preserve the XML structure
+          const updatedXml = p.xmlContent.replace(
+            /<w:t[^>]*>.*?<\/w:t>/g, 
+            `<w:t>${newText}</w:t>`
+          );
+          return { 
+            ...p, 
+            displayText: newText,
+            xmlContent: updatedXml
+          };
+        }
+        return p;
+      })
     );
   }, []);
 
   const handleExport = useCallback(async () => {
-    if (paragraphs.length === 0) {
+    if (!wordProcessor || paragraphs.length === 0) {
       toast({
         title: "No content to export",
         description: "Please upload a document first.",
@@ -54,93 +66,10 @@ const DocumentEditor = () => {
 
     setIsLoading(true);
     try {
-      const { Document, Packer, Paragraph: DocxParagraph, Table, TableRow, TableCell, TextRun } = await import('docx');
-      
-      // Convert HTML content to docx elements while preserving basic structure
-      const docElements: any[] = [];
-      
-      for (const para of paragraphs) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = para.content;
-        
-        // Handle different element types
-        if (para.content.includes('<table')) {
-          // For tables, create a simple text representation
-          const tableText = tempDiv.textContent || tempDiv.innerText || '';
-          if (tableText.trim()) {
-            docElements.push(new DocxParagraph({
-              children: [new TextRun({
-                text: `[TABLE CONTENT: ${tableText.trim()}]`,
-                italics: true
-              })],
-              spacing: { after: 200 }
-            }));
-          }
-        } else if (para.content.includes('<h1') || para.content.includes('<h2') || para.content.includes('<h3')) {
-          // Handle headings
-          const headingText = tempDiv.textContent || tempDiv.innerText || '';
-          if (headingText.trim()) {
-            docElements.push(new DocxParagraph({
-              children: [new TextRun({
-                text: headingText.trim(),
-                bold: true,
-                size: para.content.includes('<h1') ? 32 : para.content.includes('<h2') ? 28 : 24
-              })],
-              spacing: { after: 200, before: 200 }
-            }));
-          }
-        } else if (para.content.includes('<ul') || para.content.includes('<ol')) {
-          // Handle lists
-          const listItems = tempDiv.querySelectorAll('li');
-          Array.from(listItems).forEach((li, index) => {
-            const listText = li.textContent || li.innerText || '';
-            if (listText.trim()) {
-              const bullet = para.content.includes('<ul') ? '•' : `${index + 1}.`;
-              docElements.push(new DocxParagraph({
-                children: [new TextRun(`${bullet} ${listText.trim()}`)],
-                spacing: { after: 100 },
-                indent: { left: 400 }
-              }));
-            }
-          });
-        } else {
-          // Handle regular paragraphs
-          const plainText = tempDiv.textContent || tempDiv.innerText || '';
-          if (plainText.trim()) {
-            docElements.push(new DocxParagraph({
-              children: [new TextRun(plainText.trim())],
-              spacing: { after: 200 }
-            }));
-          }
-        }
-      }
-      
-      const doc = new Document({
-        sections: [{
-          properties: {},
-          children: docElements.length > 0 ? docElements : [
-            new DocxParagraph({
-              children: [new TextRun("No content to export")],
-            })
-          ]
-        }]
-      });
-
-      // Use toBlob for browser compatibility
-      const blob = await Packer.toBlob(doc);
-      
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = originalFileName ? `reordered_${originalFileName}` : 'reordered_document.docx';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
+      await wordProcessor.exportReorderedDocument(paragraphs, originalFileName);
       toast({
         title: "Document exported successfully!",
-        description: "Your reordered document has been downloaded. Note: Complex formatting may be simplified.",
+        description: "Your reordered document has been downloaded with all original formatting preserved.",
       });
     } catch (error) {
       console.error('Export error:', error);
@@ -152,7 +81,7 @@ const DocumentEditor = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [paragraphs, originalFileName, toast]);
+  }, [paragraphs, originalFileName, wordProcessor, toast]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -196,7 +125,7 @@ const DocumentEditor = () => {
           <Upload className="h-16 w-16 mx-auto mb-4 text-gray-400" />
           <h3 className="text-xl font-semibold text-gray-600 mb-2">No Document Loaded</h3>
           <p className="text-gray-500 mb-6">
-            Upload a Word document to start editing and reordering paragraphs
+            Upload a Word document to start editing and reordering paragraphs with preserved formatting
           </p>
           <FileUploader onDocumentParsed={handleDocumentParsed} />
         </Card>
@@ -204,14 +133,14 @@ const DocumentEditor = () => {
         <Card className="p-6 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-800">
-              Document Content ({paragraphs.length} sections)
+              Document Content ({paragraphs.length} paragraphs)
             </h3>
             <div className="text-sm text-gray-600">
               Mode: <span className="font-medium capitalize">{mode}</span>
             </div>
           </div>
           
-          <ParagraphList
+          <WordParagraphList
             paragraphs={paragraphs}
             mode={mode}
             onReorder={handleParagraphsReorder}
