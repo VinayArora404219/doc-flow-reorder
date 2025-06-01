@@ -1,13 +1,14 @@
-
 import React from 'react';
 import {
   DndContext,
   closestCenter,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -32,9 +33,17 @@ const ParagraphList: React.FC<ParagraphListProps> = ({
   onEdit,
 }) => {
   const sensors = useSensors(
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 0,
+        tolerance: 0,
+      },
+    }),
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Minimum distance to start dragging
+        distance: 0,
+        tolerance: 0,
+        delay: 0,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -42,7 +51,12 @@ const ParagraphList: React.FC<ParagraphListProps> = ({
     })
   );
 
+  const handleDragStart = (event: DragStartEvent) => {
+    console.log('Drag started:', event);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    console.log('Drag ended:', event);
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -76,6 +90,7 @@ const ParagraphList: React.FC<ParagraphListProps> = ({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <SortableContext items={paragraphs.map(p => p.id)} strategy={verticalListSortingStrategy}>

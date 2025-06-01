@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -90,11 +89,16 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
           : 'shadow-sm hover:shadow-md border-gray-200'
       } ${
         mode === 'drag' 
-          ? 'cursor-grab active:cursor-grabbing' 
+          ? 'cursor-grab active:cursor-grabbing touch-none select-none' 
           : ''
       }`}
       {...(mode === 'drag' ? attributes : {})}
       {...(mode === 'drag' ? listeners : {})}
+      onTouchStart={(e) => {
+        if (mode === 'drag') {
+          e.preventDefault();
+        }
+      }}
     >
       <div className="flex items-start gap-3">
         {/* Paragraph Number */}
@@ -154,10 +158,10 @@ const ParagraphItem: React.FC<ParagraphItemProps> = ({
           )}
         </div>
 
-        {/* Drag Handle */}
+        {/* Drag Handle - Only show on desktop */}
         {mode === 'drag' && !isEditing && (
-          <div className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600">
-            <ArrowUpDown className="h-4 w-4" />
+          <div className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 hidden md:block">
+            <ArrowUpDown className="h-5 w-5" />
           </div>
         )}
       </div>
